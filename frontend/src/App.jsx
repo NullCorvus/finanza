@@ -11,15 +11,25 @@ import {
   DollarSign,
   Calendar,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { GLOSARIO } from './glosario';
 
-const SUBSIDY = 1306119;
-const RATE = 0.1456;
-const FIN_SEMS = 4;
-const POST_SEMS = 6;
-const FDS_INCOME = [0, 233452, 233452, 466904];
+const SUBSIDY_LUMP = 1306119;
+const RATE_EA = 0.1456;
+const MONTHLY_RATE = 0.0114; // 1.14% monthly
+
+const formatCurrency = (val) => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(val);
+};
 
 const AccordionItem = ({ title, content }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,14 +49,6 @@ const AccordionItem = ({ title, content }) => {
       )}
     </div>
   );
-};
-
-const formatCurrency = (val) => {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    maximumFractionDigits: 0,
-  }).format(val);
 };
 
 export default function App() {
@@ -96,41 +98,52 @@ export default function App() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen bg-slate-950 text-slate-200">Cargando...</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen bg-slate-950 text-slate-200 uppercase tracking-widest text-xs">Iniciando simulador 2026...</div>;
 
   const { global_config, gastos } = config;
+
+  // Logic derived from config
+  const finSems = Math.max(1, global_config.semestre_fin - global_config.semestre_inicio + 1);
+  const fdsPerMonth = [0, 233452, 233452, 466904][global_config.fds_option];
   const totalMonthlyExp = gastos.reduce((sum, g) => sum + g.current_value, 0);
   const quota30 = global_config.icetex_active ? global_config.icetex_credit * 0.30 : 0;
-  const subsidyPerMonth = global_config.subsidy_active ? SUBSIDY / 6 : 0;
-  const fdsPerMonth = FDS_INCOME[global_config.fds_option];
 
-  // Logic for 6 months
+  // Month calculation
   const months = [];
   let running = 0;
   for (let m = 1; m <= 6; m++) {
     const isVac = m <= 2;
     const incVac = isVac ? global_config.vacation_income : 0;
     const incIcetex = (m === 1 && global_config.icetex_active) ? global_config.icetex_credit : 0;
-    const incSubsidy = !isVac ? subsidyPerMonth : 0;
+    const incSubsidy = (m === 1 && global_config.subsidy_active) ? SUBSIDY_LUMP : 0;
     const incFds = !isVac ? fdsPerMonth : 0;
     const creditPay = (m === 1 && global_config.icetex_active) ? quota30 : 0;
 
     const totalIn = incVac + incIcetex + incSubsidy + incFds;
     const totalOut = totalMonthlyExp + creditPay;
+    const prevRunning = running;
     running += totalIn - totalOut;
 
+    let statusType = 'ok';
+    let statusMsg = 'Mes cubierto';
+    if (totalIn < totalOut) {
+        if (running >= 0) {
+            statusType = 'warning';
+            statusMsg = `Usando ahorros — gastando ${formatCurrency(totalOut - totalIn)} del colchón`;
+        } else {
+            statusType = 'danger';
+            statusMsg = `Déficit — te falta ${formatCurrency(Math.abs(running))}`;
+        }
+    }
+
     months.push({
-      m,
-      isVac,
-      totalIn,
-      totalOut,
-      running,
-      coverage: (totalIn / (totalOut || 1)) * 100,
+      m, isVac, totalIn, totalOut, running, statusType, statusMsg,
+      vacationBuffer: Math.max(0, running),
       breakdown: {
         incomes: [
           { label: 'Trabajo Vacac.', value: incVac },
-          { label: 'Crédito ICETEX', value: incIcetex },
-          { label: 'Subsidio', value: incSubsidy },
+          { label: 'Desembolso ICETEX', value: incIcetex },
+          { label: 'Subsidio Sostenimiento', value: incSubsidy },
           { label: 'Fines de semana', value: incFds }
         ].filter(i => i.value > 0),
         expenses: [
@@ -145,13 +158,16 @@ export default function App() {
   const totalIncomeSem = months.reduce((s, x) => s + x.totalIn, 0);
   const totalOutSem = months.reduce((s, x) => s + x.totalOut, 0);
 
-  // Post-grad
-  const totalF = global_config.icetex_credit * FIN_SEMS;
-  const totalD = totalF * 0.7;
-  const interest = totalF * RATE * (FIN_SEMS * 0.5);
-  const totalOwed = totalD + interest;
-  const paymentMonths = POST_SEMS * 6;
-  const monthlyQuota = totalOwed / paymentMonths;
+  // Post-grad calculation
+  // Total financed over the selected range
+  const totalF = global_config.icetex_credit * finSems;
+  const totalCapitalDeuda = totalF * 0.70;
+  // Interest accrues during studies + 6 months grace
+  // Simplification: Average time in studies + 6 months
+  const avgTimeMonths = (finSems * 6) / 2 + 6;
+  const totalInterest = totalCapitalDeuda * MONTHLY_RATE * avgTimeMonths;
+  const totalOwed = totalCapitalDeuda + totalInterest;
+  const monthlyQuota = totalOwed / global_config.post_grad_term;
   const pctSal = (monthlyQuota / global_config.junior_salary) * 100;
 
   return (
@@ -160,46 +176,65 @@ export default function App() {
 
         {/* Left Column: Configuration (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 backdrop-blur-sm">
-            <h2 className="flex items-center gap-2 text-lg font-semibold mb-6">
-              <Calculator className="text-primary" /> Configuración Base
+          <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 backdrop-blur-sm shadow-xl">
+            <h2 className="flex items-center gap-2 text-lg font-bold mb-6 text-white">
+              <Calculator className="text-primary" /> CONFIGURACIÓN 2026
             </h2>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-[10px] text-slate-500 uppercase font-black mb-2 block">Inicio Semestre</label>
+                    <select
+                      value={global_config.semestre_inicio}
+                      onChange={(e) => handleGlobalChange('semestre_inicio', parseInt(e.target.value))}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white"
+                    >
+                      {[...Array(12).keys()].map(i => <option key={i+1} value={i+1}>Semestre {i+1}</option>)}
+                    </select>
+                 </div>
+                 <div>
+                    <label className="text-[10px] text-slate-500 uppercase font-black mb-2 block">Fin Semestre</label>
+                    <select
+                      value={global_config.semestre_fin}
+                      onChange={(e) => handleGlobalChange('semestre_fin', parseInt(e.target.value))}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white"
+                    >
+                      {[...Array(12).keys()].map(i => <option key={i+1} value={i+1}>Semestre {i+1}</option>)}
+                    </select>
+                 </div>
+              </div>
+
               <div>
-                <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">
-                  💼 Gano en vacaciones / mes
-                </label>
+                <label className="text-[10px] text-slate-500 uppercase font-black mb-2 block">💼 Gano en vacaciones / mes</label>
                 <input
                   type="range" min="500000" max="5000000" step="50000"
                   value={global_config.vacation_income}
                   onChange={(e) => handleGlobalChange('vacation_income', parseInt(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-primary"
                 />
-                <div className="text-right text-sm font-medium mt-1 text-primary">{formatCurrency(global_config.vacation_income)} / mes</div>
+                <div className="text-right text-sm font-bold mt-1 text-primary">{formatCurrency(global_config.vacation_income)} / mes</div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">
-                  🎓 Salario junior proyectado
-                </label>
+                <label className="text-[10px] text-slate-500 uppercase font-black mb-2 block">🎓 Salario junior proyectado / mes</label>
                 <input
                   type="range" min="1763910" max="4000000" step="50000"
                   value={global_config.junior_salary}
                   onChange={(e) => handleGlobalChange('junior_salary', parseInt(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-primary"
                 />
-                <div className="text-right text-sm font-medium mt-1 text-primary">{formatCurrency(global_config.junior_salary)} / mes</div>
+                <div className="text-right text-sm font-bold mt-1 text-primary">{formatCurrency(global_config.junior_salary)} / mes</div>
               </div>
             </div>
 
             <hr className="my-6 border-slate-800" />
 
             <div className="space-y-4">
-               <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl">
+               <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-slate-800/50">
                   <div>
-                    <div className="text-sm font-medium">📄 Crédito ICETEX 30%</div>
-                    <div className="text-[10px] text-slate-500 uppercase">Pagas el 30% en vacaciones</div>
+                    <div className="text-sm font-bold">📄 Crédito ICETEX 30%</div>
+                    <div className="text-[9px] text-slate-500 uppercase tracking-tighter font-bold">Pagas el 30% en vacaciones</div>
                   </div>
                   <input
                     type="checkbox" checked={global_config.icetex_active}
@@ -209,22 +244,22 @@ export default function App() {
                </div>
 
                {global_config.icetex_active && (
-                 <div className="pl-4 border-l-2 border-primary/30 py-1">
-                    <label className="text-xs text-slate-400 block mb-1 uppercase tracking-tighter">Monto por semestre</label>
+                 <div className="pl-4 border-l-2 border-primary/40 py-1">
+                    <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Monto por semestre</label>
                     <input
                       type="range" min="300000" max="3000000" step="50000"
                       value={global_config.icetex_credit}
                       onChange={(e) => handleGlobalChange('icetex_credit', parseInt(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-primary"
                     />
-                    <div className="text-right text-sm font-medium mt-1 text-primary">{formatCurrency(global_config.icetex_credit)} / semestre</div>
+                    <div className="text-right text-sm font-bold mt-1 text-primary">{formatCurrency(global_config.icetex_credit)} / semestre</div>
                  </div>
                )}
 
-               <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl">
+               <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-slate-800/50">
                   <div>
-                    <div className="text-sm font-medium">🏛 Subsidio Sostenimiento</div>
-                    <div className="text-[10px] text-slate-500 uppercase">Solo Sisbén A, B, C1–C7</div>
+                    <div className="text-sm font-bold">🏛 Subsidio Sostenimiento</div>
+                    <div className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">Un solo pago de {formatCurrency(SUBSIDY_LUMP)}</div>
                   </div>
                   <input
                     type="checkbox" checked={global_config.subsidy_active}
@@ -234,15 +269,15 @@ export default function App() {
                </div>
 
                <div>
-                 <label className="text-xs text-slate-400 block mb-1 uppercase tracking-tighter">📅 Trabajo fines de semana</label>
+                 <label className="text-[10px] text-slate-500 block mb-1 uppercase font-black">📅 Trabajo fines de semana / día</label>
                  <select
                    value={global_config.fds_option}
                    onChange={(e) => handleGlobalChange('fds_option', parseInt(e.target.value))}
-                   className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                   className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-1 focus:ring-primary outline-none"
                  >
                     <option value={0}>No trabajo</option>
-                    <option value={1}>Sábados</option>
-                    <option value={2}>Domingos</option>
+                    <option value={1}>Sábados ($58.363/día)</option>
+                    <option value={2}>Domingos ($58.363/día)</option>
                     <option value={3}>Sábados y Domingos</option>
                  </select>
                </div>
@@ -251,26 +286,26 @@ export default function App() {
             <button
               onClick={saveToDatabase}
               disabled={saving}
-              className="w-full mt-8 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white font-bold py-3 px-4 rounded-xl transition-all disabled:opacity-50 shadow-lg shadow-primary/20"
+              className="w-full mt-8 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white font-black py-4 rounded-xl transition-all disabled:opacity-50 shadow-lg shadow-primary/20 text-xs tracking-widest"
             >
-              <Save size={18} /> {saving ? 'Guardando...' : 'Guardar por Defecto'}
+              <Save size={18} /> {saving ? 'GUARDANDO...' : 'GUARDAR POR DEFECTO'}
             </button>
           </div>
 
-          <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
-             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><DollarSign className="text-primary" size={20}/> Gastos Mensuales</h2>
+          <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-xl">
+             <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-white"><DollarSign className="text-primary" size={20}/> GASTOS MENSUALES</h2>
              <div className="space-y-6">
                {gastos.map(g => (
                  <div key={g.id}>
                     <div className="flex justify-between mb-1">
-                      <label className="text-xs text-slate-400 uppercase tracking-tighter">{g.label}</label>
+                      <label className="text-[10px] text-slate-500 uppercase font-bold">{g.label}</label>
                       <span className="text-xs font-bold text-primary">{formatCurrency(g.current_value)} / mes</span>
                     </div>
                     <input
                       type="range" min={g.min_val} max={g.max_val} step={g.step}
                       value={g.current_value}
                       onChange={(e) => handleGastoChange(g.id, parseInt(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-primary"
                     />
                  </div>
                ))}
@@ -282,90 +317,80 @@ export default function App() {
         <div className="lg:col-span-8 space-y-8">
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-center">
-              <div className="bg-blue-500/10 p-2 rounded-full mb-3">
-                <ArrowUpRight className="text-blue-400" size={24}/>
-              </div>
-              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Total Ingresos Semestre</div>
-              <div className="text-2xl font-bold text-blue-400">{formatCurrency(totalIncomeSem)}</div>
-            </div>
-            <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-center">
-              <div className="bg-red-500/10 p-2 rounded-full mb-3">
-                <ArrowDownRight className="text-red-400" size={24}/>
-              </div>
-              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Total Gastos Semestre</div>
-              <div className="text-2xl font-bold text-red-400">{formatCurrency(totalOutSem)}</div>
-            </div>
-            <div className={`bg-slate-900/50 p-5 rounded-2xl border ${finalBal >= 0 ? 'border-success/30' : 'border-danger/30'} flex flex-col items-center justify-center text-center`}>
-              <div className={`p-2 rounded-full mb-3 ${finalBal >= 0 ? 'bg-success/10' : 'bg-danger/10'}`}>
-                <Wallet className={finalBal >= 0 ? 'text-success' : 'text-danger'} size={24}/>
-              </div>
-              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Balance Neto Final</div>
-              <div className={`text-2xl font-bold ${finalBal >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(finalBal)}</div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <SummaryStat label="Ingresos Semestre" value={formatCurrency(totalIncomeSem)} icon={<ArrowUpRight className="text-blue-400"/>} color="blue" />
+            <SummaryStat label="Gastos Semestre" value={formatCurrency(totalOutSem)} icon={<ArrowDownRight className="text-red-400"/>} color="red" />
+            <SummaryStat label="Cuota Crédito 30%" value={formatCurrency(quota30)} icon={<DollarSign className="text-amber-400"/>} color="amber" />
+            <SummaryStat label="Balance Neto" value={formatCurrency(finalBal)} icon={<Wallet className={finalBal >= 0 ? 'text-success' : 'text-danger'}/>} color={finalBal >= 0 ? 'green' : 'red'} />
           </div>
 
           {/* Month Cards Grid */}
           <div className="space-y-4">
-             <h2 className="text-xl font-bold flex items-center gap-2"><Calendar className="text-primary"/> Desglose Mensual del Semestre</h2>
+             <h2 className="text-xl font-black flex items-center gap-2 text-white uppercase tracking-tighter"><Calendar className="text-primary"/> Desglose Mensual del Semestre</h2>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                {months.map(m => (
-                 <div key={m.m} className={`p-5 rounded-2xl border backdrop-blur-sm transition-all hover:border-primary/50 ${m.isVac ? 'bg-blue-950/20 border-blue-900/50' : 'bg-slate-900/50 border-slate-800'}`}>
+                 <div key={m.m} className={`p-5 rounded-2xl border backdrop-blur-sm transition-all hover:border-primary/50 ${m.isVac ? 'bg-blue-950/20 border-blue-900/30 shadow-inner' : 'bg-slate-900/50 border-slate-800'}`}>
                     <div className="flex justify-between items-center mb-4">
                        <div className="flex items-center gap-3">
-                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${m.isVac ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${m.isVac ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
                             {m.m}
                          </div>
                          <div>
-                           <div className="text-xs text-slate-500 uppercase font-bold tracking-tighter">Mes del Semestre</div>
-                           <div className="text-sm font-bold flex items-center gap-1 uppercase tracking-widest">
+                           <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Mes {m.m}</div>
+                           <div className="text-xs font-black flex items-center gap-1 uppercase tracking-widest text-white/90">
                              {m.isVac ? <><Info size={12} className="text-blue-400"/> Vacaciones</> : 'Estudio'}
                            </div>
                          </div>
                        </div>
                        <div className="text-right">
-                          <div className="text-[10px] text-slate-500 uppercase font-bold">Acumulado</div>
+                          <div className="text-[9px] text-slate-500 uppercase font-bold mb-0.5 tracking-widest">Acumulado</div>
                           <div className={`text-lg font-black ${m.running >= 0 ? 'text-success' : 'text-danger'}`}>
                             {formatCurrency(m.running)}
                           </div>
                        </div>
                     </div>
 
-                    <div className="space-y-3">
-                       <div>
-                          <div className="text-[9px] text-slate-500 uppercase font-bold mb-1 tracking-widest border-b border-slate-800 pb-1">Ingresos</div>
+                    <div className="space-y-4">
+                       <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                          <div className="text-[9px] text-slate-500 uppercase font-bold mb-2 tracking-widest flex justify-between">
+                            <span>Ingresos</span>
+                            <span className="text-blue-400">{formatCurrency(m.totalIn)}</span>
+                          </div>
                           {m.breakdown.incomes.map((inc, i) => (
-                            <div key={i} className="flex justify-between text-xs py-0.5">
+                            <div key={i} className="flex justify-between text-[11px] py-0.5">
                                <span className="text-slate-400">{inc.label}</span>
-                               <span className="text-blue-400 font-medium">+{formatCurrency(inc.value)}</span>
+                               <span className="text-blue-300">+{formatCurrency(inc.value)}</span>
                             </div>
                           ))}
                        </div>
-                       <div>
-                          <div className="text-[9px] text-slate-500 uppercase font-bold mb-1 tracking-widest border-b border-slate-800 pb-1">Gastos</div>
+                       <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                          <div className="text-[9px] text-slate-500 uppercase font-bold mb-2 tracking-widest flex justify-between">
+                            <span>Gastos</span>
+                            <span className="text-red-400">{formatCurrency(m.totalOut)}</span>
+                          </div>
                           {m.breakdown.expenses.map((exp, i) => (
-                            <div key={i} className="flex justify-between text-xs py-0.5">
+                            <div key={i} className="flex justify-between text-[11px] py-0.5">
                                <span className="text-slate-400">{exp.label}</span>
-                               <span className="text-red-400 font-medium">-{formatCurrency(exp.value)}</span>
+                               <span className="text-red-300">-{formatCurrency(exp.value)}</span>
                             </div>
                           ))}
                        </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center">
-                       <div className="text-[10px] text-slate-500 uppercase font-bold">Cobertura de Gastos</div>
-                       <div className="flex items-center gap-2 flex-1 max-w-[120px] ml-4">
-                          <div className="h-1.5 bg-slate-800 rounded-full flex-1 overflow-hidden">
-                             <div
-                               className={`h-full ${m.coverage >= 100 ? 'bg-success' : m.coverage >= 50 ? 'bg-warning' : 'bg-danger'}`}
-                               style={{width: `${Math.min(m.coverage, 100)}%`}}
-                             ></div>
-                          </div>
-                          <span className={`text-[10px] font-bold ${m.coverage >= 100 ? 'text-success' : 'text-danger'}`}>
-                            {Math.round(m.coverage)}%
+                    <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col gap-2">
+                       <div className="flex items-center gap-2">
+                          {m.statusType === 'ok' ? <CheckCircle2 size={14} className="text-success" /> :
+                           m.statusType === 'warning' ? <AlertCircle size={14} className="text-warning" /> :
+                           <XCircle size={14} className="text-danger" />}
+                          <span className={`text-[11px] font-bold ${m.statusType === 'ok' ? 'text-success' : m.statusType === 'warning' ? 'text-warning' : 'text-danger'}`}>
+                            {m.statusMsg}
                           </span>
                        </div>
+                       {!m.isVac && m.breakdown.incomes.length === 0 && (
+                         <div className="text-[10px] text-slate-500 italic bg-slate-800/50 p-2 rounded-lg">
+                           Sin ingresos este mes — financiado con el colchón de vacaciones ({formatCurrency(m.vacationBuffer)} disponible)
+                         </div>
+                       )}
                     </div>
                  </div>
                ))}
@@ -373,71 +398,74 @@ export default function App() {
           </div>
 
           {/* Post-Graduation Section */}
-          <div className="bg-slate-900/50 p-8 rounded-3xl border border-slate-800 relative overflow-hidden group">
-             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                <GraduationCap size={120}/>
+          <div className="bg-slate-900/50 p-8 rounded-3xl border border-slate-800 relative overflow-hidden shadow-2xl">
+             <div className="absolute top-0 right-0 p-8 opacity-5">
+                <GraduationCap size={150}/>
              </div>
-             <h2 className="text-xl font-bold mb-8 flex items-center gap-2"><TrendingUp className="text-primary"/> Proyección Etapa de Pago (Post-grado)</h2>
+             <h2 className="text-xl font-black mb-8 flex items-center gap-2 text-white uppercase tracking-tighter"><TrendingUp className="text-primary"/> Etapa de Pago Post-grado (2026+)</h2>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                <div className="space-y-6">
-                   <div className="flex justify-between items-end border-b border-slate-800 pb-2">
-                      <span className="text-sm text-slate-400">Total Capital Financiado (70%)</span>
-                      <span className="font-bold text-lg text-slate-200">{formatCurrency(totalD)}</span>
-                   </div>
-                   <div className="flex justify-between items-end border-b border-slate-800 pb-2">
-                      <span className="text-sm text-slate-400">Intereses Totales Causados</span>
-                      <span className="font-bold text-lg text-red-400">{formatCurrency(interest)}</span>
-                   </div>
-                   <div className="flex justify-between items-end pt-2">
-                      <span className="text-base font-bold text-slate-100 uppercase tracking-widest">Deuda Total Estimada</span>
-                      <span className="text-2xl font-black text-red-500">{formatCurrency(totalOwed)}</span>
-                   </div>
+             <div className="grid grid-cols-1 md:grid-cols-12 gap-10 items-start">
+                <div className="md:col-span-7 space-y-6">
+                   <MetricRow label={`Sems. Financiados (${global_config.semestre_inicio} a ${global_config.semestre_fin})`} value={finSems} color="text-slate-200" />
+                   <MetricRow label="Capital Financiado (70%)" value={formatCurrency(totalCapitalDeuda)} color="text-slate-200" />
+                   <MetricRow label="Intereses Causados (Estudios + 6 meses)" value={formatCurrency(totalInterest)} color="text-red-400" />
+                   <MetricRow label="Deuda Total al Empezar Pagos" value={formatCurrency(totalOwed)} color="text-red-500" bold />
 
-                   <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                         <div className="bg-warning/20 p-2 rounded-lg text-warning">
-                            <Calendar size={20}/>
+                   <div className="bg-slate-800/50 p-5 rounded-2xl border border-slate-700 flex justify-between items-center shadow-inner">
+                      <div className="flex items-center gap-4">
+                         <div className="bg-primary/20 p-3 rounded-xl text-primary shadow-lg shadow-primary/10">
+                            <Clock size={24}/>
                          </div>
-                         <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Plazo de Pago</div>
+                         <div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Plazo Elegido</div>
+                            <input
+                              type="range" min="12" max="72" step="12"
+                              value={global_config.post_grad_term}
+                              onChange={(e) => handleGlobalChange('post_grad_term', parseInt(e.target.value))}
+                              className="w-32 accent-primary"
+                            />
+                         </div>
                       </div>
                       <div className="text-right">
-                         <div className="text-lg font-bold text-slate-200">{paymentMonths} meses</div>
-                         <div className="text-[10px] text-slate-500 uppercase font-bold">3 años aproximadamente</div>
+                         <div className="text-xl font-black text-white">{global_config.post_grad_term} meses</div>
+                         <div className="text-[10px] text-slate-500 uppercase font-bold">{global_config.post_grad_term / 12} años</div>
                       </div>
                    </div>
+                   <p className="text-[9px] text-slate-500 italic uppercase font-bold border-l-2 border-slate-700 pl-3">
+                     * El plazo predeterminado es 1.5x semestres financiados, ajustable de 1 a 6 años.
+                   </p>
                 </div>
 
-                <div className="p-8 bg-slate-800/40 rounded-3xl border border-slate-700/50 text-center relative">
-                   <div className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em] mb-4">Cuota Mensual Proyectada</div>
-                   <div className="text-4xl font-black text-primary mb-1">{formatCurrency(monthlyQuota)}</div>
-                   <div className="text-xs text-slate-500 mb-6 font-bold uppercase tracking-widest">durante {paymentMonths} meses / 3 años</div>
+                <div className="md:col-span-5 p-8 bg-slate-800/40 rounded-3xl border border-slate-700/50 text-center relative shadow-inner">
+                   <div className="text-[10px] text-slate-500 uppercase font-black tracking-[0.2em] mb-4">Cuota Mensual Proyectada</div>
+                   <div className="text-4xl font-black text-primary mb-1 drop-shadow-lg">{formatCurrency(monthlyQuota)}</div>
+                   <div className="text-[10px] text-slate-500 mb-8 font-bold uppercase tracking-widest">durante {global_config.post_grad_term} meses / {global_config.post_grad_term / 12} años</div>
 
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 px-1">
+                   <div className="space-y-3">
+                      <div className="flex justify-between text-[10px] uppercase font-black text-slate-400 px-1">
                          <span>Esfuerzo Salarial</span>
-                         <span>{Math.round(pctSal)}%</span>
+                         <span className={pctSal <= 15 ? 'text-success' : pctSal <= 25 ? 'text-warning' : 'text-danger'}>{Math.round(pctSal)}%</span>
                       </div>
-                      <div className="h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                      <div className="h-4 bg-black/40 rounded-full overflow-hidden p-1 border border-white/5 shadow-inner">
                          <div
-                           className={`h-full rounded-full transition-all duration-1000 ${pctSal <= 15 ? 'bg-success shadow-[0_0_10px_rgba(16,185,129,0.5)]' : pctSal <= 25 ? 'bg-warning shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-danger shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`}
+                           className={`h-full rounded-full transition-all duration-700 ${pctSal <= 15 ? 'bg-success' : pctSal <= 25 ? 'bg-warning' : 'bg-danger'}`}
                            style={{width: `${Math.min(pctSal, 100)}%`}}
                          ></div>
                       </div>
                    </div>
 
-                   <div className="mt-8 p-4 rounded-2xl bg-slate-950/50 text-xs text-slate-400 leading-relaxed italic border border-slate-800">
+                   <div className="mt-8 p-4 rounded-2xl bg-black/20 text-[11px] text-slate-400 leading-relaxed italic border border-white/5 font-medium">
                       {pctSal <= 15 ? (
-                        <span className="flex items-center gap-2 justify-center text-success not-italic font-bold uppercase tracking-tighter">
-                          <Info size={14}/> Cuota muy cómoda. Te sobran {formatCurrency(global_config.junior_salary - monthlyQuota)}/mes.
+                        <span className="text-success flex items-center gap-2 justify-center not-italic font-black uppercase tracking-tighter">
+                          <CheckCircle2 size={14}/> Cuota muy cómoda. Te sobran {formatCurrency(global_config.junior_salary - monthlyQuota)}/mes.
                         </span>
                       ) : pctSal <= 25 ? (
-                        <span className="flex items-center gap-2 justify-center text-warning not-italic font-bold uppercase tracking-tighter">
-                          <Info size={14}/> Manejable, pero planifica tus ahorros.
+                        <span className="text-warning flex items-center gap-2 justify-center not-italic font-black uppercase tracking-tighter">
+                          <AlertCircle size={14}/> Manejable, pero ajustado.
                         </span>
                       ) : (
-                        <span className="flex items-center gap-2 justify-center text-danger not-italic font-bold uppercase tracking-tighter">
-                          <Info size={14}/> Cuota alta. Recomendamos buscar condonación.
+                        <span className="text-danger flex items-center gap-2 justify-center not-italic font-black uppercase tracking-tighter">
+                          <XCircle size={14}/> Cuota alta. Recomendamos buscar condonación.
                         </span>
                       )}
                    </div>
@@ -446,8 +474,8 @@ export default function App() {
           </div>
 
           {/* Glossary Section */}
-          <div className="bg-slate-900/50 p-8 rounded-3xl border border-slate-800">
-             <h2 className="text-xl font-bold mb-6 flex items-center gap-2 uppercase tracking-widest"><Info className="text-primary"/> Glosario y Ayuda Teórica</h2>
+          <div className="bg-slate-900/50 p-8 rounded-3xl border border-slate-800 shadow-xl">
+             <h2 className="text-xl font-black mb-6 flex items-center gap-2 uppercase tracking-tighter text-white"><Info className="text-primary"/> Glosario y Ayuda Teórica 2026-2</h2>
              <div className="divide-y divide-slate-800">
                {GLOSARIO.map((item, idx) => (
                  <AccordionItem key={idx} title={item.title} content={item.content} />
@@ -458,11 +486,37 @@ export default function App() {
         </div>
       </div>
 
-      <div className="mt-12 text-center">
-        <p className="text-[10px] text-slate-600 max-w-2xl mx-auto italic leading-relaxed uppercase tracking-widest">
-          * Estimaciones basadas en salario mínimo proyectado 2026. Tasa efectiva anual del 14.56%. Los valores finales están sujetos a los desembolsos reales realizados por ICETEX y las condiciones vigentes del mercado financiero.
+      <div className="mt-12 text-center pb-8 border-t border-slate-800/50 pt-8">
+        <p className="text-[10px] text-slate-600 max-w-3xl mx-auto italic leading-relaxed uppercase tracking-widest font-bold">
+          * Datos verificados 2026: Tasa 14.56% EA (IPC 5.10% + 9%). Subsidio lump sum $1,306,119. Salario mínimo $1,750,905.
+          Los valores son proyecciones ilustrativas basadas en las condiciones de la convocatoria 2026-2.
         </p>
       </div>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, icon, color }) {
+  const colorMap = {
+    blue: 'bg-blue-500/5 border-blue-500/20 text-blue-400',
+    red: 'bg-red-500/5 border-red-500/20 text-red-400',
+    amber: 'bg-amber-500/5 border-amber-500/20 text-amber-400',
+    green: 'bg-success/5 border-success/20 text-success'
+  };
+  return (
+    <div className={`p-4 rounded-2xl border ${colorMap[color] || colorMap.blue} flex flex-col items-center justify-center text-center shadow-sm`}>
+      <div className="p-2 rounded-full mb-2 bg-white/5">{icon}</div>
+      <div className="text-[9px] uppercase font-black tracking-widest opacity-60 mb-1">{label}</div>
+      <div className="text-base font-black truncate w-full">{value}</div>
+    </div>
+  );
+}
+
+function MetricRow({ label, value, color, bold = false }) {
+  return (
+    <div className="flex justify-between items-end border-b border-white/5 pb-2">
+      <span className="text-xs text-slate-500 font-bold uppercase tracking-tight">{label}</span>
+      <span className={`text-sm font-black ${color} ${bold ? 'text-lg' : ''}`}>{value}</span>
     </div>
   );
 }

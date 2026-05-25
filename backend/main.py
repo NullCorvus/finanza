@@ -30,6 +30,9 @@ class GlobalConfig(BaseModel):
     icetex_active: bool
     subsidy_active: bool
     fds_option: int
+    semestre_inicio: int
+    semestre_fin: int
+    post_grad_term: int
 
 class FullConfig(BaseModel):
     global_config: GlobalConfig
@@ -54,7 +57,10 @@ async def get_config():
                 "icetex_credit": global_row["icetex_credit"],
                 "icetex_active": bool(global_row["icetex_active"]),
                 "subsidy_active": bool(global_row["subsidy_active"]),
-                "fds_option": global_row["fds_option"]
+                "fds_option": global_row["fds_option"],
+                "semestre_inicio": global_row["semestre_inicio"],
+                "semestre_fin": global_row["semestre_fin"],
+                "post_grad_term": global_row["post_grad_term"]
             },
             "gastos": [dict(row) for row in gastos_rows]
         }
@@ -74,7 +80,10 @@ async def save_config(config: FullConfig):
             icetex_credit = ?,
             icetex_active = ?,
             subsidy_active = ?,
-            fds_option = ?
+            fds_option = ?,
+            semestre_inicio = ?,
+            semestre_fin = ?,
+            post_grad_term = ?
             WHERE id = 1
         ''', (
             config.global_config.vacation_income,
@@ -82,7 +91,10 @@ async def save_config(config: FullConfig):
             config.global_config.icetex_credit,
             config.global_config.icetex_active,
             config.global_config.subsidy_active,
-            config.global_config.fds_option
+            config.global_config.fds_option,
+            config.global_config.semestre_inicio,
+            config.global_config.semestre_fin,
+            config.global_config.post_grad_term
         ))
 
         # Update expenses
