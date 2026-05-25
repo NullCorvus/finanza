@@ -67,10 +67,22 @@ export default function App() {
   }, []);
 
   const handleGlobalChange = (key, value) => {
-    setConfig(prev => ({
-      ...prev,
-      global_config: { ...prev.global_config, [key]: value }
-    }));
+    setConfig(prev => {
+      const newGlobal = { ...prev.global_config, [key]: value };
+
+      // Regla de Negocio 1.5x: Sincronizar plazo si cambian los semestres
+      if (key === 'semestre_inicio' || key === 'semestre_fin') {
+        const sStart = key === 'semestre_inicio' ? value : prev.global_config.semestre_inicio;
+        const sEnd = key === 'semestre_fin' ? value : prev.global_config.semestre_fin;
+        const sFinanced = Math.max(1, sEnd - sStart + 1);
+        newGlobal.post_grad_term = Math.round(sFinanced * 6 * 1.5);
+      }
+
+      return {
+        ...prev,
+        global_config: newGlobal
+      };
+    });
   };
 
   const handleGastoChange = (id, value) => {
@@ -158,17 +170,25 @@ export default function App() {
   const totalIncomeSem = months.reduce((s, x) => s + x.totalIn, 0);
   const totalOutSem = months.reduce((s, x) => s + x.totalOut, 0);
 
-  // Post-grad calculation
-  // Total financed over the selected range
-  const totalF = global_config.icetex_credit * finSems;
+  // Post-grad calculation (Reactive to ICETEX checkbox)
+  const icetexActive = global_config.icetex_active;
+  const totalF = icetexActive ? (global_config.icetex_credit * finSems) : 0;
   const totalCapitalDeuda = totalF * 0.70;
-  // Interest accrues during studies + 6 months grace
-  // Simplification: Average time in studies + 6 months
+
+  // Intereses causados (estudios + 6 meses gracia)
   const avgTimeMonths = (finSems * 6) / 2 + 6;
-  const totalInterest = totalCapitalDeuda * MONTHLY_RATE * avgTimeMonths;
+  const totalInterest = icetexActive ? (totalCapitalDeuda * MONTHLY_RATE * avgTimeMonths) : 0;
   const totalOwed = totalCapitalDeuda + totalInterest;
-  const monthlyQuota = totalOwed / global_config.post_grad_term;
-  const pctSal = (monthlyQuota / global_config.junior_salary) * 100;
+
+  // Sistema de Amortización Francés: C = (S * i) / (1 - (1 + i)^-n)
+  let monthlyQuota = 0;
+  if (icetexActive && totalOwed > 0 && global_config.post_grad_term > 0) {
+    const i = MONTHLY_RATE;
+    const n = global_config.post_grad_term;
+    monthlyQuota = (totalOwed * i) / (1 - Math.pow(1 + i, -n));
+  }
+
+  const pctSal = icetexActive ? (monthlyQuota / global_config.junior_salary) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8 font-sans">
