@@ -13,32 +13,28 @@ Este es un simulador avanzado para estudiantes con crédito ICETEX (modalidad 30
 
 ## Instrucciones de Ejecución
 
-### 1. Configurar y Ejecutar el Backend
-Desde la raíz del proyecto:
+### 1. Configuración Automática
+Hemos incluido un script para configurar todo el entorno de una vez:
 ```bash
-# Instalar dependencias
-pip install fastapi uvicorn pydantic
+chmod +x setup.sh
+./setup.sh
+```
+Este script instalará las dependencias de Python, inicializará la base de datos e instalará los paquetes de Node.js.
 
-# Inicializar la base de datos (solo la primera vez)
-python backend/database.py
+### 2. Ejecutar el Proyecto
+Necesitarás dos terminales abiertas:
 
-# Iniciar el servidor
+**Terminal 1 (Backend):**
+```bash
 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-El backend estará disponible en `http://localhost:8000`.
 
-### 2. Configurar y Ejecutar el Frontend
-Abre una nueva terminal y desde la raíz del proyecto:
+**Terminal 2 (Frontend):**
 ```bash
 cd frontend
-
-# Instalar dependencias
-npm install
-
-# Iniciar el servidor de desarrollo
 npm run dev
 ```
-El frontend estará disponible en `http://localhost:5173`.
+La aplicación estará disponible en `http://localhost:5173`.
 
 ## Funcionalidades Clave
 - **Sincronización en tiempo real:** Los cambios en los sliders se reflejan instantáneamente en las métricas.
