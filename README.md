@@ -14,27 +14,19 @@ Este es un simulador avanzado para estudiantes con crédito ICETEX (modalidad 30
 ## Instrucciones de Ejecución
 
 ### 1. Configuración Automática
-Hemos incluido un script para configurar todo el entorno de una vez:
+Ejecuta el script de configuración para instalar dependencias e inicializar la base de datos:
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
-Este script instalará las dependencias de Python, inicializará la base de datos e instalará los paquetes de Node.js.
 
-### 2. Ejecutar el Proyecto
-Necesitarás dos terminales abiertas:
-
-**Terminal 1 (Backend):**
+### 2. Iniciar la Aplicación
+Para arrancar tanto el backend como el frontend de forma simultánea, usa el script de inicio:
 ```bash
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+chmod +x start.sh
+./start.sh
 ```
-
-**Terminal 2 (Frontend):**
-```bash
-cd frontend
-npm run dev
-```
-La aplicación estará disponible en `http://localhost:5173`.
+La aplicación estará disponible en `http://localhost:5173`. Presiona `Ctrl+C` en la terminal para detener ambos servidores.
 
 ## Funcionalidades Clave
 - **Sincronización en tiempo real:** Los cambios en los sliders se reflejan instantáneamente en las métricas.
