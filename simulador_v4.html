@@ -1,4 +1,3 @@
-
 <style>
 .w{padding:1rem 0;font-family:var(--font-sans);}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
@@ -14,10 +13,12 @@
 .metric .mv{font-size:15px;font-weight:500;}
 .green{color:#0F6E56;}.amber{color:#854F0B;}.red{color:#A32D2D;}.blue{color:#185FA5;}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);margin-bottom:8px;}
-.toggle-row label{font-size:13px;color:var(--color-text-primary);}
+.toggle-row .tleft{flex:1;}
+.toggle-row .tlabel{font-size:13px;color:var(--color-text-primary);}
 .toggle-row .sub{font-size:11px;color:var(--color-text-secondary);}
 .toggle-row select{font-size:13px;padding:3px 6px;border-radius:var(--border-radius-md);border:.5px solid var(--color-border-tertiary);background:var(--color-background-primary);color:var(--color-text-primary);}
-.toggle-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;}
+.toggle-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;flex-shrink:0;}
+.icetex-detail{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px;margin-bottom:8px;border-left:3px solid #378ADD;}
 .exp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:1rem;}
 .exp-item{display:flex;flex-direction:column;gap:3px;}
 .exp-item label{font-size:12px;color:var(--color-text-secondary);}
@@ -46,31 +47,55 @@
 .gauge-bg{background:var(--color-background-secondary);border-radius:6px;height:12px;overflow:hidden;margin:6px 0;}
 .gauge-fill{height:12px;border-radius:6px;transition:width .3s;}
 .note{font-size:11px;color:var(--color-text-secondary);margin-top:.5rem;}
+.disabled-section{opacity:.4;pointer-events:none;}
 </style>
 
 <div class="w">
-<h2 class="sr-only">Simulador completo ingresos y gastos crédito ICETEX 30%</h2>
+<h2 class="sr-only">Simulador completo ingresos y gastos semestre</h2>
 
+<div class="stitle">⚙️ Configuración base</div>
 <div class="sl-row">
-  <label>Matrícula por semestre</label>
-  <input type="range" id="sl1" min="300000" max="5000000" step="50000" value="1000000">
-  <span class="sl-val" id="d1">$1.000.000</span>
+  <label>💼 Gano en vacaciones/mes</label>
+  <input type="range" id="slVac" min="500000" max="5000000" step="50000" value="1750905">
+  <span class="sl-val" id="dVac">$1.750.905</span>
 </div>
 <div class="sl-row">
-  <label>Salario junior al graduarte</label>
-  <input type="range" id="sl2" min="1763910" max="4000000" step="50000" value="2500000">
-  <span class="sl-val" id="d2">$2.500.000</span>
+  <label>🎓 Salario junior al graduarte</label>
+  <input type="range" id="slSal" min="1763910" max="4000000" step="50000" value="2500000">
+  <span class="sl-val" id="dSal">$2.500.000</span>
 </div>
 
 <hr class="divider">
 <div class="stitle">💵 Fuentes de ingreso adicionales</div>
 
 <div class="toggle-row">
-  <div><div>Subsidio de sostenimiento ICETEX</div><div class="sub">~$1.306.119 por semestre · Solo niveles Sisbén A, B, C1–C7</div></div>
+  <div class="tleft">
+    <div class="tlabel">📄 Crédito ICETEX sostenimiento</div>
+    <div class="sub">Entra como ingreso · pagas 30% en vacaciones</div>
+  </div>
+  <input type="checkbox" id="chkIcetex" onchange="toggleIcetex()" checked>
+</div>
+<div id="icetexDetail" class="icetex-detail">
+  <div class="sl-row" style="margin-bottom:0;">
+    <label style="min-width:150px;">Monto crédito por semestre</label>
+    <input type="range" id="slCred" min="300000" max="3000000" step="50000" value="1000000">
+    <span class="sl-val" id="dCred">$1.000.000</span>
+  </div>
+</div>
+
+<div class="toggle-row">
+  <div class="tleft">
+    <div class="tlabel">🏛 Subsidio de sostenimiento ICETEX</div>
+    <div class="sub">~$1.306.119 por semestre · Solo Sisbén A, B, C1–C7</div>
+  </div>
   <input type="checkbox" id="chkSubsidio" onchange="render()">
 </div>
+
 <div class="toggle-row">
-  <div><div>Trabajo fines de semana (meses de estudio)</div><div class="sub">Salario mínimo diario · $58.363/día</div></div>
+  <div class="tleft">
+    <div class="tlabel">📅 Trabajo fines de semana (meses de estudio)</div>
+    <div class="sub">Salario mínimo diario · $58.363/día</div>
+  </div>
   <select id="selFds" onchange="render()">
     <option value="0">No trabajo fines de semana</option>
     <option value="1">Solo sábados (~$233.000/mes)</option>
@@ -94,7 +119,7 @@
 <div class="metrics" id="semSummary"></div>
 
 <hr class="divider">
-<div class="stitle">📚 Línea de tiempo crédito S6→S9</div>
+<div class="stitle" id="tlTitle">📚 Línea de tiempo crédito S6→S9</div>
 <div class="timeline" id="timeline"></div>
 
 <hr class="divider">
@@ -109,21 +134,21 @@
   <div class="verdict" id="verdict"></div>
 </div>
 
-<p class="note">* Salario mínimo 2026: $1.750.905 · Diario: $58.363 · Tasa crédito: 14,56% EA · Post-grado: 3 años (6 sems) · Subsidio sostenimiento: $1.306.119/sem (sujeto a Sisbén y disponibilidad) · Valores ilustrativos.</p>
+<p class="note">* Salario mínimo 2026: $1.750.905 · Diario: $58.363 · Tasa crédito: 14,56% EA · Post-grado: 3 años (6 sems) · Subsidio: $1.306.119/sem · Valores ilustrativos.</p>
 </div>
 
 <script>
-const MIN=1750905, DAILY=58363, SUBSIDY=1306119, RATE=0.1456;
+const SUBSIDY=1306119, RATE=0.1456;
 const FIN_SEMS=4, POST_SEMS=6;
 const FDS_INCOME=[0,233452,233452,466904];
 
 const expenses=[
-  {id:'alim',label:'🍽 Alimentación',min:50000,max:1000000,step:10000,def:300000},
-  {id:'transp',label:'🚌 Transporte',min:0,max:500000,step:10000,def:120000},
+  {id:'alim',label:'🍽 Alimentación',min:50000,max:1000000,step:10000,def:400000},
+  {id:'transp',label:'🚌 Transporte',min:0,max:500000,step:10000,def:0},
   {id:'arriendo',label:'🏠 Arriendo/vivienda',min:0,max:1500000,step:50000,def:0},
-  {id:'serv',label:'💡 Servicios/internet',min:0,max:300000,step:10000,def:80000},
+  {id:'serv',label:'💡 Servicios/internet',min:0,max:300000,step:10000,def:100000},
   {id:'mat',label:'📚 Materiales/U',min:0,max:300000,step:10000,def:50000},
-  {id:'otros',label:'🛍 Otros',min:0,max:500000,step:10000,def:100000},
+  {id:'otros',label:'🛍 Otros',min:0,max:500000,step:10000,def:50000},
 ];
 
 const eg=document.getElementById('expGrid');
@@ -133,13 +158,25 @@ expenses.forEach(e=>{
 
 function fmt(n){return"$"+Math.round(n).toLocaleString("es-CO");}
 
+function toggleIcetex(){
+  const on=document.getElementById('chkIcetex').checked;
+  document.getElementById('icetexDetail').style.display=on?'block':'none';
+  document.getElementById('tlTitle').style.display=on?'block':'none';
+  document.getElementById('timeline').style.display=on?'flex':'none';
+  render();
+}
+
 function render(){
-  const perSem=parseInt(document.getElementById('sl1').value);
-  const juniorSal=parseInt(document.getElementById('sl2').value);
+  const vacPerMonth=parseInt(document.getElementById('slVac').value);
+  const juniorSal=parseInt(document.getElementById('slSal').value);
+  const withIcetex=document.getElementById('chkIcetex').checked;
+  const credSem=withIcetex?parseInt(document.getElementById('slCred').value):0;
   const withSubsidy=document.getElementById('chkSubsidio').checked;
   const fdsOpt=parseInt(document.getElementById('selFds').value);
-  document.getElementById('d1').textContent=fmt(perSem);
-  document.getElementById('d2').textContent=fmt(juniorSal);
+
+  document.getElementById('dVac').textContent=fmt(vacPerMonth);
+  document.getElementById('dSal').textContent=fmt(juniorSal);
+  if(withIcetex) document.getElementById('dCred').textContent=fmt(credSem);
 
   let totalExp=0;
   expenses.forEach(e=>{
@@ -148,33 +185,26 @@ function render(){
     totalExp+=v;
   });
 
-  const quota30=perSem*0.30;
+  const quota30=credSem*0.30;
   const subsidyPerMonth=withSubsidy?SUBSIDY/6:0;
-  const fdsPerMonth=FDS_INCOME[fdsOpt]; // only during study months
-  const icetexMonthly=perSem/6; // ICETEX credit covers tuition = ingreso mes 1
+  const fdsPerMonth=FDS_INCOME[fdsOpt];
 
-  // Build 6 months
-  // M1-M2: vacation → MIN salary each month; M1: also ICETEX disbursement, M1: pay quota30
-  // M3-M6: study → fds + subsidio + (ICETEX distribuido)
-  let months=[];
-  let running=0;
+  let months=[], running=0;
   for(let m=1;m<=6;m++){
     const isVac=m<=2;
-    const incVac=isVac?MIN:0;
-    const incIcetex=m===1?perSem:0; // ICETEX paga matrícula completa → ingreso semestral
-    const incSubsidy=(!isVac)?subsidyPerMonth:0;
-    const incFds=(!isVac)?fdsPerMonth:0;
-    const creditPay=m===1?quota30:0; // paga cuota en mes 1 vacaciones
+    const incVac=isVac?vacPerMonth:0;
+    const incIcetex=(m===1&&withIcetex)?credSem:0;
+    const incSubsidy=!isVac?subsidyPerMonth:0;
+    const incFds=!isVac?fdsPerMonth:0;
+    const creditPay=(m===1&&withIcetex)?quota30:0;
     const totalIn=incVac+incIcetex+incSubsidy+incFds;
     const totalOut=totalExp+creditPay;
-    const net=totalIn-totalOut;
-    running+=net;
-    months.push({m,isVac,incVac,incIcetex,incSubsidy,incFds,creditPay,totalIn,totalOut,net,running});
+    running+=totalIn-totalOut;
+    months.push({m,isVac,incVac,incIcetex,incSubsidy,incFds,creditPay,totalIn,totalOut,running});
   }
 
-  // Months render
   let mhtml='';
-  months.forEach(({m,isVac,incVac,incIcetex,incSubsidy,incFds,creditPay,totalIn,totalOut,net,running})=>{
+  months.forEach(({m,isVac,incVac,incIcetex,incSubsidy,incFds,creditPay,totalIn,totalOut,running})=>{
     const cov=Math.min(100,Math.round((totalIn/Math.max(1,totalOut))*100));
     const barC=cov>=100?'#1D9E75':cov>=60?'#BA7517':'#A32D2D';
     const balC=running>=0?'#0F6E56':'#A32D2D';
@@ -195,58 +225,58 @@ function render(){
   document.getElementById('months').innerHTML=mhtml;
 
   const finalBal=months[5].running;
-  let balMsg,balBg;
-  if(finalBal>=0){
-    balMsg=`✅ Cierras el semestre con <b>${fmt(finalBal)}</b> de saldo positivo.`;
-    balBg='#EAF3DE';
-  } else {
-    balMsg=`⚠️ Te faltan <b>${fmt(Math.abs(finalBal))}</b> para cubrir el semestre. ${!withSubsidy?'Activa el subsidio de sostenimiento si clasificas en Sisbén.':'Considera trabajar más fines de semana.'}`;
-    balBg='#FAEEDA';
-  }
-  document.getElementById('semBalance').innerHTML=`<div style="background:${balBg};border-radius:var(--border-radius-md);padding:9px 13px;font-size:13px;margin-bottom:.9rem;">${balMsg}</div>`;
-
   const totalIncomeSem=months.reduce((s,x)=>s+x.totalIn,0);
   const totalOutSem=months.reduce((s,x)=>s+x.totalOut,0);
+  let balMsg,balBg;
+  if(finalBal>=0){balMsg=`✅ Cierras el semestre con <b>${fmt(finalBal)}</b> de saldo positivo.`;balBg='#EAF3DE';}
+  else{balMsg=`⚠️ Te faltan <b>${fmt(Math.abs(finalBal))}</b>. ${!withSubsidy?'Activa el subsidio si clasificas Sisbén.':!withIcetex?'Considera activar el crédito ICETEX.':'Considera trabajar más fines de semana.'}`;balBg='#FAEEDA';}
+  document.getElementById('semBalance').innerHTML=`<div style="background:${balBg};border-radius:var(--border-radius-md);padding:9px 13px;font-size:13px;margin-bottom:.9rem;">${balMsg}</div>`;
   document.getElementById('semSummary').innerHTML=`
     <div class="metric"><div class="ml">Total ingresos semestre</div><div class="mv blue">${fmt(totalIncomeSem)}</div></div>
     <div class="metric"><div class="ml">Total gastos semestre</div><div class="mv red">${fmt(totalOutSem)}</div></div>
-    <div class="metric"><div class="ml">Cuota crédito (30%)</div><div class="mv amber">${fmt(quota30)}</div></div>
+    ${withIcetex?`<div class="metric"><div class="ml">Cuota crédito (30%)</div><div class="mv amber">${fmt(quota30)}</div></div>`:''}
     <div class="metric"><div class="ml">Balance final</div><div class="mv ${finalBal>=0?'green':'red'}">${fmt(finalBal)}</div></div>
   `;
 
-  // Timeline
-  let tl='';
-  for(let s=1;s<=5;s++) tl+=`<div class="sem done"><div class="sn">S${s}</div><div class="sa">listo</div></div>`;
-  const totalF=perSem*FIN_SEMS, totalD=totalF*.7, interest=totalF*RATE*(FIN_SEMS*.5), totalOwed=totalD+interest;
-  for(let s=6;s<=9;s++) tl+=`<div class="sem fut"><div class="sn">S${s}</div><div class="sa">${fmt(quota30)}</div></div>`;
-  for(let p=1;p<=POST_SEMS;p++) tl+=`<div class="sem post"><div class="sn">P${p}</div><div class="sa">${fmt(totalOwed/POST_SEMS/6)}/m</div></div>`;
-  document.getElementById('timeline').innerHTML=tl;
-
-  const monthly=totalOwed/(POST_SEMS*6);
-  const pctSal=(monthly/juniorSal)*100;
-  document.getElementById('postMetrics').innerHTML=`
-    <div class="metric"><div class="ml">Total financiado</div><div class="mv">${fmt(totalF)}</div></div>
-    <div class="metric"><div class="ml">Deuda al graduarte</div><div class="mv red">${fmt(totalD)}</div></div>
-    <div class="metric"><div class="ml">Interés estimado</div><div class="mv red">${fmt(interest)}</div></div>
-    <div class="metric"><div class="ml">Total a pagar</div><div class="mv red">${fmt(totalOwed)}</div></div>
-    <div class="metric"><div class="ml">Cuota mensual</div><div class="mv amber">${fmt(monthly)}</div></div>
-    <div class="metric"><div class="ml">Te queda libre/mes</div><div class="mv green">${fmt(juniorSal-monthly)}</div></div>
-  `;
-
-  const bp=Math.min(pctSal,100);
-  const bc=pctSal<=15?'#1D9E75':pctSal<=25?'#BA7517':'#A32D2D';
-  document.getElementById('gaugeBar').style.cssText=`width:${bp}%;background:${bc};`;
-  document.getElementById('gaugeMid').textContent=Math.round(pctSal)+'% del salario';
-  document.getElementById('gaugeMax').textContent=fmt(juniorSal);
-  let vt,vb;
-  if(pctSal<=15){vt=`✅ Cuota muy cómoda — solo el <b>${Math.round(pctSal)}%</b> de tu salario. Te sobran <b>${fmt(juniorSal-monthly)}</b>/mes.`;vb='#EAF3DE';}
-  else if(pctSal<=25){vt=`⚠️ Manejable — <b>${Math.round(pctSal)}%</b> del salario. Te quedan <b>${fmt(juniorSal-monthly)}</b>/mes.`;vb='#FAEEDA';}
-  else{vt=`🔴 Cuota alta — <b>${Math.round(pctSal)}%</b> del salario. Apunta a condonación con el Fondo Transformando Vidas.`;vb='#FCEBEB';}
-  document.getElementById('verdict').innerHTML=vt;
-  document.getElementById('verdict').style.background=vb;
+  // Timeline & post-grad (only if ICETEX active)
+  if(withIcetex){
+    const totalF=credSem*FIN_SEMS, totalD=totalF*.7, interest=totalF*RATE*(FIN_SEMS*.5), totalOwed=totalD+interest;
+    let tl='';
+    for(let s=1;s<=5;s++) tl+=`<div class="sem done"><div class="sn">S${s}</div><div class="sa">listo</div></div>`;
+    for(let s=6;s<=9;s++) tl+=`<div class="sem fut"><div class="sn">S${s}</div><div class="sa">${fmt(quota30)}</div></div>`;
+    for(let p=1;p<=POST_SEMS;p++) tl+=`<div class="sem post"><div class="sn">P${p}</div><div class="sa">${fmt(totalOwed/POST_SEMS/6)}/m</div></div>`;
+    document.getElementById('timeline').innerHTML=tl;
+    const monthly=totalOwed/(POST_SEMS*6);
+    const pctSal=(monthly/juniorSal)*100;
+    document.getElementById('postMetrics').innerHTML=`
+      <div class="metric"><div class="ml">Total financiado</div><div class="mv">${fmt(totalF)}</div></div>
+      <div class="metric"><div class="ml">Deuda al graduarte</div><div class="mv red">${fmt(totalD)}</div></div>
+      <div class="metric"><div class="ml">Interés estimado</div><div class="mv red">${fmt(interest)}</div></div>
+      <div class="metric"><div class="ml">Total a pagar</div><div class="mv red">${fmt(totalOwed)}</div></div>
+      <div class="metric"><div class="ml">Cuota mensual</div><div class="mv amber">${fmt(monthly)}</div></div>
+      <div class="metric"><div class="ml">Te queda libre/mes</div><div class="mv green">${fmt(juniorSal-monthly)}</div></div>
+    `;
+    const bp=Math.min(pctSal,100);
+    const bc=pctSal<=15?'#1D9E75':pctSal<=25?'#BA7517':'#A32D2D';
+    document.getElementById('gaugeBar').style.cssText=`width:${bp}%;background:${bc};`;
+    document.getElementById('gaugeMid').textContent=Math.round(pctSal)+'% del salario';
+    document.getElementById('gaugeMax').textContent=fmt(juniorSal);
+    let vt,vb;
+    if(pctSal<=15){vt=`✅ Cuota muy cómoda — solo el <b>${Math.round(pctSal)}%</b> de tu salario. Te sobran <b>${fmt(juniorSal-monthly)}</b>/mes.`;vb='#EAF3DE';}
+    else if(pctSal<=25){vt=`⚠️ Manejable — <b>${Math.round(pctSal)}%</b> del salario. Te quedan <b>${fmt(juniorSal-monthly)}</b>/mes.`;vb='#FAEEDA';}
+    else{vt=`🔴 Cuota alta — <b>${Math.round(pctSal)}%</b>. Apunta a condonación con Fondo Transformando Vidas.`;vb='#FCEBEB';}
+    document.getElementById('verdict').innerHTML=vt;
+    document.getElementById('verdict').style.background=vb;
+  } else {
+    document.getElementById('postMetrics').innerHTML=`<div style="font-size:13px;color:var(--color-text-secondary);padding:.5rem;">Activa el crédito ICETEX para ver la sección de post-grado.</div>`;
+    document.getElementById('gaugeBar').style.width='0%';
+    document.getElementById('verdict').innerHTML='';
+    document.getElementById('verdict').style.background='transparent';
+  }
 }
 
-document.getElementById('sl1').addEventListener('input',render);
-document.getElementById('sl2').addEventListener('input',render);
+document.getElementById('slVac').addEventListener('input',render);
+document.getElementById('slSal').addEventListener('input',render);
+document.getElementById('slCred').addEventListener('input',render);
 render();
 </script>
