@@ -1,0 +1,233 @@
+
+<style>
+.w{padding:1rem 0;font-family:var(--font-sans);}
+.stitle{font-size:12px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.divider{border:none;border-top:.5px solid var(--color-border-tertiary);margin:1rem 0;}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:1rem;}
+.metric{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.7rem .9rem;}
+.metric .ml{font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;}
+.metric .mv{font-size:15px;font-weight:500;}
+.green{color:#0F6E56;}.amber{color:#854F0B;}.red{color:#A32D2D;}.blue{color:#185FA5;}
+.timeline-v{display:flex;flex-direction:column;gap:0;}
+.phase{display:flex;gap:0;margin-bottom:0;}
+.phase-label{width:90px;min-width:90px;display:flex;align-items:center;justify-content:flex-end;padding-right:12px;font-size:11px;color:var(--color-text-secondary);text-align:right;}
+.phase-content{flex:1;border-left:2px solid var(--color-border-tertiary);padding:0 0 16px 16px;position:relative;}
+.phase-content::before{content:'';position:absolute;left:-7px;top:4px;width:12px;height:12px;border-radius:50%;border:2px solid var(--color-border-tertiary);background:var(--color-background-primary);}
+.phase-study .phase-content::before{border-color:#378ADD;background:#378ADD;}
+.phase-grad .phase-content::before{border-color:#1D9E75;background:#1D9E75;}
+.phase-post .phase-content::before{border-color:#D85A30;background:#D85A30;}
+.phase-end .phase-content::before{border-color:#1D9E75;background:#1D9E75;}
+.phase-end .phase-content{border-left:2px dashed var(--color-border-tertiary);}
+.sem-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.sem-box{border-radius:var(--border-radius-md);padding:6px 8px;font-size:11px;min-width:80px;}
+.sem-box .sb-title{font-weight:500;margin-bottom:3px;}
+.sem-box .sb-row{display:flex;justify-content:space-between;font-size:10px;gap:8px;}
+.study-box{background:#E6F1FB;border:.5px solid #B5D4F4;}
+.study-box .sb-title{color:#185FA5;}
+.post-box{background:#FAECE7;border:.5px solid #F5C4B3;}
+.post-box .sb-title{color:#993C1D;}
+.card{background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:1rem;margin-bottom:1rem;}
+.bar-container{margin:8px 0;}
+.bar-label{display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;}
+.bar-bg{background:var(--color-border-tertiary);border-radius:4px;height:10px;overflow:hidden;}
+.bar-fill{height:10px;border-radius:4px;}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:var(--border-radius-md);margin-right:4px;margin-bottom:4px;}
+.note{font-size:11px;color:var(--color-text-secondary);margin-top:.5rem;}
+</style>
+
+<div class="w">
+<h2 class="sr-only">Comportamiento del crédito ICETEX con ejemplo de 2 millones por semestre</h2>
+
+<div class="stitle">💡 Ejemplo: $2.000.000 por semestre (S6 → S9)</div>
+
+<div class="metrics" id="mainMetrics"></div>
+
+<hr class="divider">
+<div class="stitle">📊 Cómo crece y se reduce la deuda</div>
+<div class="card" id="debtChart"></div>
+
+<hr class="divider">
+<div class="stitle">📅 Semestre a semestre — qué pasa con tu deuda</div>
+<div class="timeline-v" id="timeline"></div>
+
+<hr class="divider">
+<div class="stitle">🎓 Resumen final</div>
+<div class="card" id="summary"></div>
+
+<p class="note">* Tasa 14,56% EA = 7,06% semestral. El interés se calcula sobre el saldo pendiente de cada semestre. Plazo post-grado: 6 semestres (3 años). Valores ilustrativos.</p>
+</div>
+
+<script>
+const PER_SEM = 2000000;
+const FIN_SEMS = 4;
+const POST_SEMS = 6;
+const RATE_SEM = 0.0706; // 14.56% EA ≈ 7.06% semestral
+const RATE_MONTHLY = 0.01143; // 14.56% EA ≈ 1.143% mensual
+
+function fmt(n){return"$"+Math.round(n).toLocaleString("es-CO");}
+
+// Calculate debt evolution
+// Each semester: ICETEX disburses PER_SEM, student pays 30% = 600k
+// 70% = 1.4M is deferred and accrues interest
+// Outstanding balance grows each semester
+
+let balance = 0;
+let totalPaidStudy = 0;
+let totalDisbursed = 0;
+let semData = [];
+
+// Study phase: S6-S9
+for(let s=0;s<FIN_SEMS;s++){
+  // Interest on existing balance
+  const interestThisSem = balance * RATE_SEM;
+  balance += interestThisSem;
+  // New disbursement
+  balance += PER_SEM;
+  totalDisbursed += PER_SEM;
+  // Student pays 30%
+  const payment = PER_SEM * 0.30;
+  balance -= payment;
+  totalPaidStudy += payment;
+  semData.push({
+    sem: 6+s,
+    type:'study',
+    disbursed: PER_SEM,
+    payment,
+    interest: interestThisSem,
+    balance: Math.round(balance)
+  });
+}
+
+const balanceAtGrad = balance;
+const totalInterestStudy = semData.reduce((s,x)=>s+x.interest,0);
+
+// Post-grad phase: fixed monthly payment
+const monthlyPayment = balance * RATE_MONTHLY / (1 - Math.pow(1+RATE_MONTHLY, -POST_SEMS*6));
+let postSemData = [];
+for(let p=0;p<POST_SEMS;p++){
+  const startBal = balance;
+  let semInterest = 0;
+  let semPayment = 0;
+  for(let m=0;m<6;m++){
+    const interest = balance * RATE_MONTHLY;
+    semInterest += interest;
+    balance += interest;
+    balance -= monthlyPayment;
+    semPayment += monthlyPayment;
+  }
+  postSemData.push({
+    sem: p+1,
+    startBal: Math.round(startBal),
+    endBal: Math.round(Math.max(0,balance)),
+    interest: Math.round(semInterest),
+    payment: Math.round(semPayment)
+  });
+}
+
+const totalInterestPost = postSemData.reduce((s,x)=>s+x.interest,0);
+const totalInterest = totalInterestStudy + totalInterestPost;
+const totalPaidPost = postSemData.reduce((s,x)=>s+x.payment,0);
+const grandTotal = totalPaidStudy + totalPaidPost;
+
+// Main metrics
+document.getElementById('mainMetrics').innerHTML=`
+  <div class="metric"><div class="ml">Total que recibiste</div><div class="mv blue">${fmt(totalDisbursed)}</div></div>
+  <div class="metric"><div class="ml">Pagaste mientras estudiabas</div><div class="mv amber">${fmt(totalPaidStudy)}</div></div>
+  <div class="metric"><div class="ml">Deuda al graduarte</div><div class="mv red">${fmt(balanceAtGrad)}</div></div>
+  <div class="metric"><div class="ml">Cuota mensual post-grado</div><div class="mv amber">${fmt(monthlyPayment)}</div></div>
+  <div class="metric"><div class="ml">Total intereses</div><div class="mv red">${fmt(totalInterest)}</div></div>
+  <div class="metric"><div class="ml">Total pagado en tu vida</div><div class="mv red">${fmt(grandTotal)}</div></div>
+`;
+
+// Debt chart
+const maxBal = balanceAtGrad;
+const allBals = [...semData.map(x=>x.balance), ...postSemData.map(x=>x.startBal), 0];
+const maxBar = Math.max(...allBals);
+
+let chartHtml = `<div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:12px;">Evolución del saldo de tu deuda</div>`;
+semData.forEach(x=>{
+  const pct = Math.round((x.balance/maxBar)*100);
+  chartHtml+=`<div class="bar-container">
+    <div class="bar-label"><span>S${x.sem} (estudiando)</span><span style="color:#A32D2D;">${fmt(x.balance)}</span></div>
+    <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:#378ADD;"></div></div>
+  </div>`;
+});
+chartHtml+=`<div class="bar-container">
+  <div class="bar-label"><span style="font-weight:500;">🎓 Te gradúas</span><span style="color:#A32D2D;font-weight:500;">${fmt(balanceAtGrad)}</span></div>
+  <div class="bar-bg"><div class="bar-fill" style="width:100%;background:#D85A30;"></div></div>
+</div>`;
+postSemData.forEach((x,i)=>{
+  const pct = Math.round((x.endBal/maxBar)*100);
+  chartHtml+=`<div class="bar-container">
+    <div class="bar-label"><span>Post ${i+1} (pagando)</span><span style="color:${x.endBal>0?'#854F0B':'#0F6E56'};">${fmt(x.endBal)}</span></div>
+    <div class="bar-bg"><div class="bar-fill" style="width:${Math.max(0,pct)}%;background:${pct>50?'#D85A30':pct>20?'#BA7517':'#1D9E75'};"></div></div>
+  </div>`;
+});
+document.getElementById('debtChart').innerHTML=chartHtml;
+
+// Timeline
+let tlHtml='';
+
+// Study sems
+tlHtml+=`<div class="phase phase-study">
+  <div class="phase-label">Mientras<br>estudias</div>
+  <div class="phase-content">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px;">Semestres S6 → S9</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;">Cada semestre ICETEX te da ${fmt(PER_SEM)} → tú pagas el 30% = ${fmt(PER_SEM*0.3)} → el 70% (${fmt(PER_SEM*0.7)}) queda pendiente y genera intereses</div>
+    <div class="sem-row">`;
+semData.forEach(x=>{
+  tlHtml+=`<div class="sem-box study-box">
+    <div class="sb-title">S${x.sem}</div>
+    <div class="sb-row"><span style="color:var(--color-text-secondary);">Pagaste</span><span style="color:#0F6E56;">${fmt(x.payment)}</span></div>
+    <div class="sb-row"><span style="color:var(--color-text-secondary);">Interés</span><span style="color:#A32D2D;">${fmt(x.interest)}</span></div>
+    <div class="sb-row"><span style="color:var(--color-text-secondary);">Saldo</span><span style="color:#A32D2D;font-weight:500;">${fmt(x.balance)}</span></div>
+  </div>`;
+});
+tlHtml+=`</div></div></div>`;
+
+// Graduation
+tlHtml+=`<div class="phase phase-grad">
+  <div class="phase-label">Te<br>gradúas</div>
+  <div class="phase-content">
+    <div style="font-size:13px;font-weight:500;color:#0F6E56;margin-bottom:4px;">🎓 Deuda acumulada: ${fmt(balanceAtGrad)}</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);">A partir de aquí pagas ${fmt(monthlyPayment)}/mes durante 3 años</div>
+  </div>
+</div>`;
+
+// Post grad sems
+tlHtml+=`<div class="phase phase-post">
+  <div class="phase-label">Post<br>grado</div>
+  <div class="phase-content">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px;">6 semestres pagando (3 años)</div>
+    <div class="sem-row">`;
+postSemData.forEach((x,i)=>{
+  tlHtml+=`<div class="sem-box post-box">
+    <div class="sb-title">Sem ${i+1}</div>
+    <div class="sb-row"><span style="color:var(--color-text-secondary);">Pagas</span><span style="color:#993C1D;">${fmt(x.payment)}</span></div>
+    <div class="sb-row"><span style="color:var(--color-text-secondary);">Interés</span><span style="color:#A32D2D;">${fmt(x.interest)}</span></div>
+    <div class="sb-row"><span style="color:var(--color-text-secondary);">Saldo</span><span style="color:${x.endBal<100?'#0F6E56':'#854F0B'};font-weight:500;">${fmt(x.endBal)}</span></div>
+  </div>`;
+});
+tlHtml+=`</div></div></div>`;
+
+// End
+tlHtml+=`<div class="phase phase-end">
+  <div class="phase-label">Libre</div>
+  <div class="phase-content">
+    <div style="font-size:13px;font-weight:500;color:#0F6E56;">✅ Crédito saldado</div>
+  </div>
+</div>`;
+
+document.getElementById('timeline').innerHTML=tlHtml;
+
+// Summary
+document.getElementById('summary').innerHTML=`
+  <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:10px;">Por cada ${fmt(PER_SEM)} que recibes, en total pagas:</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+    <span class="tag" style="background:#E6F1FB;color:#185FA5;">Recibiste: ${fmt(totalDisbursed)}</span>
+    <span class="tag" style="background:#FAEEDA;color:#854F0B;">Intereses: ${fmt(totalInterest)}</span>
+    <span class="tag" style="background:#FAECE7;color:#993C1D;">Total pagado: ${fmt(grandTotal)}</span>
+  </div>
+  <div style="font-size:12px;color:var(--color-text-secondary);">El crédito te costó <b style="color:#A32D2D;">${fmt(totalInterest)}</b> extra en intereses — o sea pagas <b>${Math.round((grandTotal/totalDisbursed-1)*100)}% más</b> de lo que recibiste.</div>
+`;
+</script>
